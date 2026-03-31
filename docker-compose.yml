@@ -1,10 +1,60 @@
 services:
-  postgres:
+  eu-db:
     image: postgres:16
-    container_name: tasks_postgres
+    container_name: eu_tasks_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: tasks_db
     ports:
       - "5433:5432"
+    volumes:
+      - eu_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasks_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  us-db:
+    image: postgres:16
+    container_name: us_tasks_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasks_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - us_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tasks_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  eu-app:
+    build: .
+    container_name: eu_tasks_app
+    env_file:
+      - .env.eu
+    depends_on:
+      eu-db:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+
+  us-app:
+    build: .
+    container_name: us_tasks_app
+    env_file:
+      - .env.us
+    depends_on:
+      us-db:
+        condition: service_healthy
+    ports:
+      - "8002:8000"
+
+volumes:
+  eu_postgres_data:
+  us_postgres_data:
