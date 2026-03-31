@@ -7,3 +7,4 @@ python-dotenv
 aio-pika
 pip-tools
 uuid6
+httpx

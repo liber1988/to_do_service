@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.task import Task
+from app.schemas.replication import ReplicatedTaskCreate
 from app.schemas.task import TaskCreate
 
 
@@ -10,6 +11,27 @@ def create_task(db: Session, task_in: TaskCreate) -> Task:
     task = Task(
         title=task_in.title,
         description=task_in.description,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_task_from_replication(
+    db: Session,
+    task_in: ReplicatedTaskCreate,
+) -> Task:
+    existing_task = db.query(Task).filter(Task.task_id == task_in.task_id).first()
+
+    if existing_task is not None:
+        return existing_task
+
+    task = Task(
+        task_id=task_in.task_id,
+        title=task_in.title,
+        description=task_in.description,
+        deleted=task_in.deleted,
     )
     db.add(task)
     db.commit()
@@ -31,6 +53,21 @@ def delete_task(db: Session, task_id: uuid.UUID) -> Task | None:
 
     if task is None:
         return None
+
+    task.deleted = True
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def delete_task_from_replication(db: Session, task_id: uuid.UUID) -> Task | None:
+    task = db.query(Task).filter(Task.task_id == task_id).first()
+
+    if task is None:
+        return None
+
+    if task.deleted is True:
+        return task
 
     task.deleted = True
     db.commit()
