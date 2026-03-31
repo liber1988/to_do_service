@@ -14,10 +14,15 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
     # via
+    #   httpx
     #   starlette
     #   watchfiles
 build==1.4.2
     # via pip-tools
+certifi==2026.2.25
+    # via
+    #   httpcore
+    #   httpx
 click==8.3.1
     # via
     #   pip-tools
@@ -32,12 +37,19 @@ fastapi==0.135.2
 greenlet==3.3.2
     # via sqlalchemy
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
 httptools==0.7.1
     # via uvicorn
+httpx==0.28.1
+    # via -r requirements.in
 idna==3.11
     # via
     #   anyio
+    #   httpx
     #   yarl
 multidict==6.7.1
     # via yarl
