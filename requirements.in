@@ -8,3 +8,4 @@ aio-pika
 pip-tools
 uuid6
 httpx
+aio-pika
