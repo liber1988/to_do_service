@@ -1,40 +1,43 @@
 import uuid
+from uuid6 import uuid7
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.crud.task import (
-    create_task,
-    create_task_from_replication,
-    delete_task,
-    delete_task_from_replication,
-    get_tasks,
-)
+from app.broker import publish_event
+from app.crud.task import create_task, delete_task, get_tasks
 from app.dependencies import get_db
-from app.replication import replicate_create_task, replicate_delete_task
-from app.schemas.replication import ReplicatedTaskCreate, ReplicatedTaskDelete
+from app.schemas.event import TaskCreatedEvent, TaskDeletedEvent
 from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
 
-router = APIRouter(tags=["tasks"])
+router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task_endpoint(
+@router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_task_endpoint(
     task_in: TaskCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     task = create_task(db=db, task_in=task_in)
 
-    replicate_create_task(
-        task_id=str(task.task_id),
+    event = TaskCreatedEvent(
+        event_id=str(uuid7()),
+        task_id=task.task_id,
         title=task.title,
         description=task.description,
+    )
+
+    await publish_event(
+        channel=request.app.state.rabbit_channel,
+        routing_key="task.created",
+        payload=event.model_dump(mode="json"),
     )
 
     return task
 
 
-@router.get("/tasks", response_model=TaskListResponse)
+@router.get("", response_model=TaskListResponse)
 def get_tasks_endpoint(
     db: Session = Depends(get_db),
 ):
@@ -42,9 +45,10 @@ def get_tasks_endpoint(
     return {"items": tasks}
 
 
-@router.delete("/tasks/{task_id}", response_model=TaskResponse)
-def delete_task_endpoint(
+@router.delete("/{task_id}", response_model=TaskResponse)
+async def delete_task_endpoint(
     task_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     task = delete_task(db=db, task_id=task_id)
@@ -55,35 +59,15 @@ def delete_task_endpoint(
             detail="Task not found",
         )
 
-    replicate_delete_task(task_id=str(task.task_id))
+    event = TaskDeletedEvent(
+        event_id=str(uuid7()),
+        task_id=task.task_id,
+    )
 
-    return task
-
-
-@router.post(
-    "/internal/tasks",
-    response_model=TaskResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def replicate_task_create_endpoint(
-    task_in: ReplicatedTaskCreate,
-    db: Session = Depends(get_db),
-):
-    task = create_task_from_replication(db=db, task_in=task_in)
-    return task
-
-
-@router.post("/internal/tasks/delete", response_model=TaskResponse)
-def replicate_task_delete_endpoint(
-    task_in: ReplicatedTaskDelete,
-    db: Session = Depends(get_db),
-):
-    task = delete_task_from_replication(db=db, task_id=task_in.task_id)
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found on replica",
-        )
+    await publish_event(
+        channel=request.app.state.rabbit_channel,
+        routing_key="task.deleted",
+        payload=event.model_dump(mode="json"),
+    )
 
     return task
