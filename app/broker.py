@@ -2,37 +2,32 @@ import json
 import os
 
 import aio_pika
-from aio_pika import ExchangeType, Message, RobustChannel, RobustConnection
+from aio_pika import ExchangeType, Message
+from fastapi import FastAPI
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq/")
 
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-EXCHANGE_NAME = "tasks"
-
-
-async def connect_broker() -> tuple[RobustConnection, RobustChannel]:
+async def connect_rabbitmq(app: FastAPI) -> None:
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     channel = await connection.channel()
 
     await channel.declare_exchange(
-        EXCHANGE_NAME,
-        ExchangeType.TOPIC,
+        "tasks",
+        ExchangeType.DIRECT,
         durable=True,
     )
 
-    return connection, channel
+    app.state.rabbit_connection = connection
+    app.state.rabbit_channel = channel
 
 
-async def publish_event(
-    channel: RobustChannel,
-    routing_key: str,
-    payload: dict,
-) -> None:
-    exchange = await channel.get_exchange(EXCHANGE_NAME)
-
-    message = Message(
-        body=json.dumps(payload).encode("utf-8"),
-        content_type="application/json",
-        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+async def publish_event(channel, routing_key: str, payload: dict) -> None:
+    exchange = await channel.get_exchange("tasks")
+    await exchange.publish(
+        Message(
+            body=json.dumps(payload).encode(),
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+        ),
+        routing_key=routing_key,
     )
-
-    await exchange.publish(message, routing_key=routing_key)

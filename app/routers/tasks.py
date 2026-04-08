@@ -1,3 +1,4 @@
+import os
 import uuid
 from uuid6 import uuid7
 
@@ -12,6 +13,8 @@ from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+REGION = os.getenv("REGION", "local")
+
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task_endpoint(
@@ -23,6 +26,7 @@ async def create_task_endpoint(
 
     event = TaskCreatedEvent(
         event_id=str(uuid7()),
+        source_region=REGION,
         task_id=task.task_id,
         title=task.title,
         description=task.description,
@@ -61,6 +65,7 @@ async def delete_task_endpoint(
 
     event = TaskDeletedEvent(
         event_id=str(uuid7()),
+        source_region=REGION,
         task_id=task.task_id,
     )
 
